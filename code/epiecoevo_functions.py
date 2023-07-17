@@ -114,6 +114,115 @@ def tolerance_model_no_tradeoff(state_vars, t, p):
     return([dN, dI, dZ, dalphaN, dalphaI, dvN, dvI])
 
 
+def intensity_reduction_resistance_model_with_tradeoff(state_vars, t, p):
+    """
+    Single-species moment-closure model with tolerance and perfect inheritance,
+    7 equations.
+
+    Parameters
+    ----------
+    state_vars : array-like
+        [N, I, Z, alphaN, alphaI, vN, vI]
+            N is total population size
+            I is infected population size,
+            Z is pathogen population size in the environment
+            alphaN is the mean tolerance in the full population
+            alphaI is the mean tolerance in the infected population
+            vN is the second moment of tolerance in the full population
+            vI is the second moment of tolerance in the infected population
+    t : float
+        Time step
+    p: dict
+        Dictionary of parameters
+            'r': Host fecundity
+            'delta': Intraspecific competition
+            'mu': Host death rate
+            'beta': Tranmission rate
+            'lam': Parasite shedding rate
+            'mu_z': Parasite death rate
+
+    Returns
+    -------
+    : right-hand side of ODEs
+    """
+
+    N, I, Z, alphaN, alphaI, vN, vI = state_vars
+    S = N - I
+    alphaI3 = third_moment_gamma(alphaI, vI - alphaI**2)
+    kN = get_k(alphaN, vN)
+
+    dN = p['r']*N*g1(alphaN, kN, p['alpha_m']) - p['delta']*N**2 - p['mu']*N - I*alphaI
+    dI = p['beta']*Z*S - p['mu']*I - I*alphaI
+    dZ = p['phi']*I*alphaI - p['mu_z']*Z
+    dalphaN = p['r']*(g2(alphaN, kN, p['alpha_m']) - alphaN*g1(alphaN, kN, p['alpha_m']))    - (I / N)*(vI - alphaN*alphaI)
+
+    if I != 0:
+        dalphaI = p['beta']*Z*(N / I)*(alphaN - alphaI) - (vI - alphaI**2)
+        dvI = p['beta']*Z*(N / I)*(vN - vI) - (alphaI3 - vI*alphaI)
+    else:
+        dalphaI = 0
+        dvI = 0
+
+    dvN = p['r']*(g3(alphaN, kN, p['alpha_m']) - vN*g1(alphaN, kN, p['alpha_m'])) - (I / N)*(alphaI3 - vN*alphaI)
+
+    return([dN, dI, dZ, dalphaN, dalphaI, dvN, dvI])
+
+
+def intensity_reduction_resistance_model_no_tradeoff(state_vars, t, p):
+    """
+    Single-species moment-closure model with tolerance and perfect inheritance,
+    7 equations.
+
+    Parameters
+    ----------
+    state_vars : array-like
+        [N, I, Z, alphaN, alphaI, vN, vI]
+            N is total population size
+            I is infected population size,
+            Z is pathogen population size in the environment
+            alphaN is the mean tolerance in the full population
+            alphaI is the mean tolerance in the infected population
+            vN is the second moment of tolerance in the full population
+            vI is the second moment of tolerance in the infected population
+    t : float
+        Time step
+    p: dict
+        Dictionary of parameters
+            'r': Host fecundity
+            'delta': Intraspecific competition
+            'mu': Host death rate
+            'beta': Tranmission rate
+            'lam': Parasite shedding rate
+            'mu_z': Parasite death rate
+            'phi': scaling parameter: ratio of per parasite shdding rate to per parasite mortality rate
+
+    Returns
+    -------
+    : right-hand side of ODEs
+    """
+
+    N, I, Z, alphaN, alphaI, vN, vI = state_vars
+    S = N - I
+    alphaI3 = third_moment_gamma(alphaI, vI - alphaI**2)
+
+    dN = p['r']*N - p['delta']*N**2 - p['mu']*N - I*alphaI
+    dI = p['beta']*Z*S - p['mu']*I - I*alphaI
+    dZ = p['phi']*I*alphaI - p['mu_z']*Z
+    dalphaN = -(I / N)*(vI - alphaN*alphaI)
+
+    if I > 1e-10:
+        dalphaI = p['beta']*Z*(N / I)*(alphaN - alphaI) - (vI - alphaI**2)
+        dvI = p['beta']*Z*(N / I)*(vN - vI) - (alphaI3 - vI*alphaI)
+    else:
+        dalphaI = 0
+        dvI = 0
+
+
+    dvN = -(I / N)*(alphaI3 - vN*alphaI)
+
+    return([dN, dI, dZ, dalphaN, dalphaI, dvN, dvI])
+
+
 def tolerance_model_tradeoff_approximation(state_vars, t, params):
     """
     Single-species moment-closure model with tolerance and perfect inheritance,
@@ -776,6 +885,51 @@ def full_tolerance_model(state_vars, t, p):
     return(rhs)
 
 
+def full_ir_resistance_model(state_vars, t, p):
+    """
+    An approximation of the full intensity-reduction resistance model without the moment
+    closure approach.  In this model, each bin of N and I have a different
+    value of alpha.
+
+    Parameters
+    ----------
+    state_vars : array-like
+        N vector, I vector, Z where N and I vector the different beta classes
+        N vector and I vector should have the same length and are discrete
+        bins corresponding to a level of alpha
+    t : array
+        time
+    p : dict
+        Parameters including
+        'bins': The number of discrete beta classes to use
+        'alpha_vals': The vector of alpha values that correspond to each class in N and I
+        'r_vals': The vector of r values that correspond to each class in N and I
+        'delta': Intraspecific competition
+        'mu': Host death rate
+        'beta': Transmission rate
+        'lam_vals': Parasite shedding rate based on level of alpha
+        'mu_z': Parasite death rate
+
+    Returns
+    -------
+    : right-hand side of ODE
+    """
+
+    bins = p['bins']
+    Nvals = state_vars[:bins]
+    Ivals = state_vars[bins:(2*bins)]
+    Z = state_vars[-1]
+    alpha_vals = p['alpha_vals'] # vector of alpha values
+    r_vals = p['r_vals'] # Vector of r vals based on trade-off
+
+    Neqs = r_vals*Nvals - p['delta']*np.sum(Nvals)*Nvals - p['mu']*Nvals - alpha_vals*Ivals
+    Ieqs = p['beta']*Z*(Nvals - Ivals) - Ivals*(p['mu'] + alpha_vals)
+    Zeq = np.sum(Ivals*p['lam_vals']) - p['mu_z']*Z
+
+    rhs = list(np.concatenate([Neqs, Ieqs, [Zeq]]))
+    return(rhs)
+
+
 def r_fxn(beta, beta_m, r):
     """ 
 
@@ -803,3 +957,39 @@ def r_fxn(beta, beta_m, r):
         newr = np.repeat(r, len(beta))
 
     return(newr)
+
+def r_fxn_plaw(beta, beta_m, r, slope):
+    """
+    Resistance or tolerance - fecundity trade-off with piece-wise powerlaw
+    tradeoff
+
+    Parameters
+    ----------
+    beta : float or array
+        Parameter value at which to calculate trade-off
+    beta_m : float
+        The value of beta at which fecundity starts to decrease
+    r : float
+        The maximum reproductive rate when beta > beta_m
+    slope : float
+        Slope of the power law function
+
+    """
+
+    beta = np.atleast_1d(beta)
+    a = r / (beta_m**slope)
+    if beta_m > 0:
+
+        newr = np.empty(len(beta))
+        ind = beta < beta_m
+        newr[ind] = a*beta[ind]**slope
+        newr[~ind] = r
+
+    else:
+        newr = np.repeat(r, len(beta))
+
+    return(newr)
+
+
+
+

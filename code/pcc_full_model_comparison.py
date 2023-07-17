@@ -20,7 +20,7 @@ plt.rcParams['font.sans-serif'] = "Arial"
 
 """
 Perform the same PCC analysis as Fig. 2 in the main text, but using the full 
-resistance and tolerance models. The key goal of this script to to demonstrate
+avoidance resistance and tolerance models. The key goal of this script to to demonstrate
 that the inference we are making from the reduced, moment-closure models is
 the same as the full model. Here, we approximate the full models with 200 bins.
 """
