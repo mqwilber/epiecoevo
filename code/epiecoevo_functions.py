@@ -223,6 +223,61 @@ def intensity_reduction_resistance_model_no_tradeoff(state_vars, t, p):
     return([dN, dI, dZ, dalphaN, dalphaI, dvN, dvI])
 
 
+def intensity_reduction_resistance_model_no_tradeoff_depletion(state_vars, t, p):
+    """
+    Single-species moment-closure model with tolerance and perfect inheritance,
+    7 equations, and parasite depletion.
+
+    Parameters
+    ----------
+    state_vars : array-like
+        [N, I, Z, alphaN, alphaI, vN, vI]
+            N is total population size
+            I is infected population size,
+            Z is pathogen population size in the environment
+            alphaN is the mean tolerance in the full population
+            alphaI is the mean tolerance in the infected population
+            vN is the second moment of tolerance in the full population
+            vI is the second moment of tolerance in the infected population
+    t : float
+        Time step
+    p: dict
+        Dictionary of parameters
+            'r': Host fecundity
+            'delta': Intraspecific competition
+            'mu': Host death rate
+            'beta': Tranmission rate
+            'lam': Parasite shedding rate
+            'mu_z': Parasite death rate
+            'phi': scaling parameter: ratio of per parasite shdding rate to per parasite mortality rate
+
+    Returns
+    -------
+    : right-hand side of ODEs
+    """
+
+    N, I, Z, alphaN, alphaI, vN, vI = state_vars
+    S = N - I
+    alphaI3 = third_moment_gamma(alphaI, vI - alphaI**2)
+
+    dN = p['r']*N - p['delta']*N**2 - p['mu']*N - I*alphaI
+    dI = p['beta']*Z*S - p['mu']*I - I*alphaI
+    dZ = p['phi']*I*alphaI - p['mu_z']*Z - p['beta']*Z*N
+    dalphaN = -(I / N)*(vI - alphaN*alphaI)
+
+    if I > 1e-10:
+        dalphaI = p['beta']*Z*(N / I)*(alphaN - alphaI) - (vI - alphaI**2)
+        dvI = p['beta']*Z*(N / I)*(vN - vI) - (alphaI3 - vI*alphaI)
+    else:
+        dalphaI = 0
+        dvI = 0
+
+
+    dvN = -(I / N)*(alphaI3 - vN*alphaI)
+
+    return([dN, dI, dZ, dalphaN, dalphaI, dvN, dvI])
+
+
 def tolerance_model_tradeoff_approximation(state_vars, t, params):
     """
     Single-species moment-closure model with tolerance and perfect inheritance,
