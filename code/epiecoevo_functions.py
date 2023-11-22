@@ -8,8 +8,8 @@ from sympy import Symbol, symbols, Matrix, lambdify
 
 """
 
-Functions used to analyze the Epi-Eco-Evo model in the manuscript 
-"Towards a theory of host recovery dynamics following disease-induced declines"
+Functions used to analyze the model in the manuscript 
+"Rapid evolution of resistance and tolerance leads to variable host recoveries following disease-induced declines"
 
 """
 
